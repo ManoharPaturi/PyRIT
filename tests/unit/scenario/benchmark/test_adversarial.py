@@ -32,7 +32,7 @@ These tests cover the new contract:
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -291,6 +291,7 @@ class TestAdversarialBenchmarkInit:
         with patch.object(AdversarialBenchmark, "_get_default_objective_scorer", return_value=default_scorer):
             bench = AdversarialBenchmark()
         assert bench._objective_scorer is default_scorer
+        assert bench.uses_default_adversarial_target is False
 
     def test_construct_with_explicit_objective_scorer(self):
         explicit_scorer = MagicMock(spec=TrueFalseScorer)
@@ -1014,7 +1015,7 @@ def _persist_attack_result(
         objective=objective,
         atomic_attack_identifier=_make_atomic_attack_identifier(target),
         outcome=outcome,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         attribution_data={"parent_collection": atomic_attack_name} if atomic_attack_name else None,
     )
     memory.add_attack_results_to_memory(attack_results=[attack_result])
