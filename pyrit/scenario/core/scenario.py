@@ -710,6 +710,8 @@ class Scenario(ABC):
 
         from pyrit.scenario.core.matrix_atomic_attack_builder import (
             filter_compatible_seed_groups,
+        )
+        from pyrit.scenario.core.technique_resolution import (
             resolve_technique_factories_for_techniques,
         )
 
@@ -755,6 +757,8 @@ class Scenario(ABC):
         """
         from pyrit.scenario.core.matrix_atomic_attack_builder import (
             filter_compatible_seed_groups,
+        )
+        from pyrit.scenario.core.technique_resolution import (
             resolve_technique_factories_for_techniques,
         )
 

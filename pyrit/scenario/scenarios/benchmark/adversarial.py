@@ -31,10 +31,12 @@ from pyrit.scenario.core.dataset_configuration import DatasetAttackConfiguration
 from pyrit.scenario.core.matrix_atomic_attack_builder import (
     MatrixAtomicAttackBuilder,
     filter_compatible_seed_groups,
+)
+from pyrit.scenario.core.scenario import BaselineAttackPolicy, Scenario
+from pyrit.scenario.core.technique_resolution import (
     resolve_technique_factories,
     resolve_technique_factories_for_techniques,
 )
-from pyrit.scenario.core.scenario import BaselineAttackPolicy, Scenario
 
 if TYPE_CHECKING:
     from pyrit.prompt_target import PromptTarget
