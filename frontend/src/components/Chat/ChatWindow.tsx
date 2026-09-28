@@ -218,6 +218,8 @@ interface ChatWindowProps {
   onHumanScoreChange?: (score: BackendScore | null, outcome: AttackOutcome) => void
   onAttackChange?: (attack: AttackSummary) => void
   labels?: Record<string, string>
+  /** False while the current generation's server defaults are still loading; launching is gated. */
+  defaultsReady?: boolean
   onNavigate?: (view: ViewName) => void
   /** Operator from the loaded attack (for operator locking). Null for new attacks. */
   attackOperator?: string | null
@@ -261,6 +263,7 @@ export default function ChatWindow({
   onHumanScoreChange,
   onAttackChange,
   labels,
+  defaultsReady = false,
   onNavigate,
   attackOperator,
   attackTarget,
@@ -564,6 +567,7 @@ export default function ChatWindow({
   ): Promise<ChatSendOutcome> => {
     if (
       !runtime.ready
+      || !defaultsReady
       || !activeTarget
       || isLoadingAttack
       || isLoadingMessages

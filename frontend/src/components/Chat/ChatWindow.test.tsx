@@ -373,6 +373,7 @@ describe("ChatWindow Integration", () => {
 
   const defaultProps = {
     onNewAttack: jest.fn(),
+    defaultsReady: true,
     activeTarget: mockTarget,
     availableTargets: [mockTarget],
     targetsLoading: false,

@@ -380,4 +380,25 @@ describe('Shared new run labels', () => {
     app.unmount()
   })
 })
+
+  it('shows the refreshed default on a connected client that has not overridden it', async () => {
+    // First render: gen-1, server default operation is config_op.
+    const { runtimeApi } = jest.requireMock('@/services/api')
+    runtimeApi.getReadiness.mockResolvedValue({ ready: true, state: 'ready', generation: 'gen-1' })
+    jest.mocked(versionApi.getVersion).mockResolvedValue({ version: '1.0.0', default_labels: DEFAULT_LABELS })
+
+    const app = renderApp()
+    await screen.findByRole('button', { name: 'Edit operation, currently config_op' })
+
+    // Runtime reinitializes to gen-2 with a changed default operation. This
+    // client never set an override, so it must inherit the new default once
+    // the readiness poll advances and /version is re-fetched.
+    runtimeApi.getReadiness.mockResolvedValue({ ready: true, state: 'ready', generation: 'gen-2' })
+    jest.mocked(versionApi.getVersion).mockResolvedValue({
+      version: '1.0.0', default_labels: { ...DEFAULT_LABELS, operation: 'config_op_v2' },
+    })
+
+    await screen.findByRole('button', { name: 'Edit operation, currently config_op_v2' }, { timeout: 8000 })
+    app.unmount()
+  })
 })
