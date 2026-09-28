@@ -697,6 +697,7 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
                     defaultObjectiveTarget={targetDefaults.objectiveTarget}
                     defaultAdversarialTarget={targetDefaults.adversarialTarget}
                     labels={globalLabels}
+                    defaultsReady={defaultsReady}
                     onNavigate={handleNavigate}
                   />
                 }

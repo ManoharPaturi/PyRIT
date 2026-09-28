@@ -1039,7 +1039,7 @@ export default function ChatWindow({
   ])
 
   const confirmBranch = async (): Promise<void> => {
-    if (!branchRequest || !branchTarget || branchingRef.current || targetsLoading || targetsError) return
+    if (!branchRequest || !branchTarget || branchingRef.current || targetsLoading || targetsError || !defaultsReady) return
     if (!isBranchTargetAvailable) {
       setBranchError('The destination target changed or is no longer registered. Select a target again.')
       return
@@ -1335,7 +1335,7 @@ export default function ChatWindow({
                 appearance="primary"
                 onClick={confirmBranch}
                 disabled={!branchTarget || targetsLoading || Boolean(targetsError) || isBranching
-                  || !isBranchTargetAvailable}
+                  || !isBranchTargetAvailable || !defaultsReady}
               >
                 Create attack
               </Button>
