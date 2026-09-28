@@ -174,16 +174,14 @@ export function useChatConverters(text: string, attachments: MessageAttachment[]
   const activeRun = useRef<number | null>(null)
 
   if (state.generation !== generation) {
-    // A runtime generation change invalidates generated results, but text the
-    // user typed into the working copy is theirs and must survive the swap.
-    // Working entries for pieces that no longer exist are inert (lookups are
-    // by current input id).
+    // A runtime generation change invalidates every generated result. Working
+    // edits follow the same rule reconcileInputs applies: they survive only
+    // when their underlying piece is unchanged, so a stale edit can never be
+    // applied to text the user swapped in with the new generation.
+    const next = reconcileInputs(state, inputs)
     setState({
-      ...state,
+      ...next,
       generation,
-      sourceInputs: inputs,
-      inputs: inputs.map((input: ConverterInputPiece) => ({ ...input, revision: state.nextRevision + 1 })),
-      nextRevision: state.nextRevision + 1,
       stageResults: {},
       errors: {},
       applied: {},

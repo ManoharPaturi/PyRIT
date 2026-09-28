@@ -1,25 +1,56 @@
 /**
- * Regression tests for working-copy persistence across runtime generation
- * changes (#2867): user-authored working text must survive a generation swap
- * even though generated stage results are invalidated.
+ * Regression tests for useChatConverters around runtime generation changes
+ * (#2867): user-authored working text must survive a generation swap, stale
+ * edits must not survive a composer-text swap, and generated results must
+ * clear. Review pass by @romanlutz on PR #2873.
  */
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 
-import type { MessageAttachment } from '@/types'
+import { convertersApi } from '@/services/api'
 import { useChatConverters } from './useChatConverters'
+import type { MessageAttachment } from '@/types'
 
-const runtimeState = { generation: 'gen-1' }
+const runtime = { generation: 'gen-1' }
+
+jest.mock('@/services/api', () => ({
+  convertersApi: {
+    previewConversion: jest.fn(),
+  },
+}))
+
+jest.mock('./useRuntime', () => ({
+  useRuntime: () => ({ generation: runtime.generation }),
+}))
 
 // Stable reference: the hook re-reconciles whenever the attachments array
 // identity changes, mirroring the memoized call site in ChatWindow.
 const NO_ATTACHMENTS: MessageAttachment[] = []
 
-jest.mock('./useRuntime', () => ({
-  useRuntime: () => ({ generation: runtimeState.generation }),
-}))
+const mockedPreview = convertersApi.previewConversion as jest.Mock
 
-describe('useChatConverters working-copy persistence', () => {
-  it('keeps user-authored working text when the runtime generation changes', () => {
+beforeEach(() => {
+  runtime.generation = 'gen-1'
+  mockedPreview.mockReset()
+})
+
+function makePreviewResponse() {
+  return {
+    original_value: 'original text',
+    steps: [
+      {
+        converter_id: 'base64-default',
+        converter_type: 'Base64Converter',
+        input_value: 'original text',
+        input_data_type: 'text',
+        output_value: 'b3JpZ2luYWwgdGV4dA==',
+        output_data_type: 'text',
+      },
+    ],
+  }
+}
+
+describe('useChatConverters across runtime generation changes', () => {
+  it('keeps user-authored working text when only the generation changes', () => {
     const { result, rerender } = renderHook(
       ({ text }: { text: string }) => useChatConverters(text, NO_ATTACHMENTS),
       { initialProps: { text: 'original text' } },
@@ -30,26 +61,79 @@ describe('useChatConverters working-copy persistence', () => {
     })
     expect(result.current.workingInputs['text']).toBe('user edited text')
 
-    runtimeState.generation = 'gen-2'
+    runtime.generation = 'gen-2'
     rerender({ text: 'original text' })
 
     expect(result.current.workingInputs['text']).toBe('user edited text')
   })
 
-  it('still clears generated stage results when the runtime generation changes', () => {
+  it('drops the stale working edit when the composer text changes with the generation', () => {
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) => useChatConverters(text, NO_ATTACHMENTS),
+      { initialProps: { text: 'first draft' } },
+    )
+
+    act(() => {
+      result.current.editInput('text', 'edited first draft')
+    })
+    expect(result.current.workingInputs['text']).toBe('edited first draft')
+
+    runtime.generation = 'gen-2'
+    rerender({ text: 'second draft' })
+
+    expect(result.current.workingInputs['text']).toBeUndefined()
+  })
+
+  it('clears a real generated stage result on a generation change', async () => {
+    mockedPreview.mockResolvedValue(makePreviewResponse())
     const { result, rerender } = renderHook(
       ({ text }: { text: string }) => useChatConverters(text, NO_ATTACHMENTS),
       { initialProps: { text: 'original text' } },
     )
 
     act(() => {
-      result.current.editInput('text', 'working copy')
+      result.current.setPipeline('text', (stages) => [...stages, { id: 'stage-1', converterId: 'base64-default' }])
+    })
+    await act(async () => {
+      result.current.convert('text')
+    })
+    await waitFor(() => {
+      expect(result.current.stageResults['text']?.length).toBe(1)
     })
 
-    runtimeState.generation = 'gen-2'
+    act(() => {
+      result.current.apply()
+    })
+    expect(result.current.applied['text']).toBeDefined()
+
+    runtime.generation = 'gen-2'
     rerender({ text: 'original text' })
 
-    expect(result.current.stageResults['text']).toEqual([])
-    expect(result.current.applied).toEqual({})
+    expect(result.current.stageResults['text']).toBeUndefined()
+    expect(result.current.applied['text']).toBeUndefined()
+  })
+
+  it('keeps a configured-pipeline working edit across a generation change while clearing its generated result', () => {
+    mockedPreview.mockResolvedValue(makePreviewResponse())
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) => useChatConverters(text, NO_ATTACHMENTS),
+      { initialProps: { text: 'original text' } },
+    )
+
+    // Configure a pipeline, then hand-edit the working copy instead of running
+    // the pipeline — the second reproduction path from #2867.
+    act(() => {
+      result.current.setPipeline('text', (stages) => [...stages, { id: 'stage-1', converterId: 'base64-default' }])
+    })
+    act(() => {
+      result.current.editInput('text', 'hand-edited working text')
+    })
+    expect(result.current.workingInputs['text']).toBe('hand-edited working text')
+
+    runtime.generation = 'gen-2'
+    rerender({ text: 'original text' })
+
+    expect(result.current.workingInputs['text']).toBe('hand-edited working text')
+    expect(result.current.stageResults['text']).toBeUndefined()
   })
 })
