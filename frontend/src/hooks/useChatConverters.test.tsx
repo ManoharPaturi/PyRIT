@@ -113,15 +113,16 @@ describe('useChatConverters across runtime generation changes', () => {
     expect(result.current.applied['text']).toBeUndefined()
   })
 
-  it('keeps a configured-pipeline working edit across a generation change while clearing its generated result', () => {
+  it('keeps a configured-pipeline working edit across a generation change while clearing its generated result', async () => {
     mockedPreview.mockResolvedValue(makePreviewResponse())
     const { result, rerender } = renderHook(
       ({ text }: { text: string }) => useChatConverters(text, NO_ATTACHMENTS),
       { initialProps: { text: 'original text' } },
     )
 
-    // Configure a pipeline, then hand-edit the working copy instead of running
-    // the pipeline — the second reproduction path from #2867.
+    // Configure a pipeline, hand-edit the working copy on top of it, then run
+    // the pipeline so a REAL generated stage result exists before the swap —
+    // the second reproduction path from #2867.
     act(() => {
       result.current.setPipeline('text', (stages) => [...stages, { id: 'stage-1', converterId: 'base64-default' }])
     })
@@ -129,6 +130,13 @@ describe('useChatConverters across runtime generation changes', () => {
       result.current.editInput('text', 'hand-edited working text')
     })
     expect(result.current.workingInputs['text']).toBe('hand-edited working text')
+
+    await act(async () => {
+      result.current.convert('text')
+    })
+    await waitFor(() => {
+      expect(result.current.stageResults['text']?.length).toBe(1)
+    })
 
     runtime.generation = 'gen-2'
     rerender({ text: 'original text' })
