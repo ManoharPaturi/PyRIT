@@ -567,7 +567,7 @@ export default function ChatWindow({
   ): Promise<ChatSendOutcome> => {
     if (
       !runtime.ready
-      || !defaultsReady
+      || (!attackResultId && !defaultsReady)  // new attacks only; replies use the attack's saved labels
       || !activeTarget
       || isLoadingAttack
       || isLoadingMessages
@@ -1427,7 +1427,7 @@ export default function ChatWindow({
         <ChatInputArea
           ref={inputBoxRef}
           onSend={handleSend}
-          sendDisabled={isLoadingMessages || awaitingConversationLoad}
+          sendDisabled={(!attackResultId && !defaultsReady) || isLoadingMessages || awaitingConversationLoad}
           conversionRevisionKey={conversionRevisionKey}
           showSystemPrompt={!attackResultId}
           supportsSystemPrompt={supportsSystemPrompt}
