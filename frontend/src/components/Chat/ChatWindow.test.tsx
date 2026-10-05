@@ -17,6 +17,7 @@ import {
   MessageAttachment,
   MessageSendStatus,
   PromptResponseError,
+  RuntimeReadiness,
   TargetCapabilities,
   TargetInfo,
   TargetInstance,
@@ -6462,27 +6463,42 @@ describe("ChatWindow Integration", () => {
   });
 
   describe('defaults readiness gating scope', () => {
+    const savedAttack: AttackSummary = {
+      attack_result_id: "existing-attack",
+      conversation_id: "conv-1",
+      attack_type: "ManualAttack",
+      objective: "",
+      outcome: "undetermined",
+      converters: [],
+      message_count: 2,
+      related_conversation_ids: [],
+      operator: "testuser",
+      operation: "original_op",
+      labels: { team: "original_team" },
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:01Z",
+    }
+    const reply: AddMessageResponse = {
+      attack: savedAttack,
+      messages: { conversation_id: "conv-1", messages: [], target_response_status: null },
+    }
+
     it('allows sending a reply in an existing attack while defaults are loading', async () => {
       const user = userEvent.setup()
+      const onAttackChange = jest.fn()
       mockedAttacksApi.getMessages.mockResolvedValue({ messages: [] })
       mockedMapper.backendMessagesToFrontend.mockReturnValue([])
       mockedMapper.buildMessagePieces.mockResolvedValue([
         { data_type: "text", original_value: "replying in an existing attack" },
       ])
-      mockedAttacksApi.addMessage.mockResolvedValue({
-        ...makeTextResponse("Reply back!"),
-        attack: {
-          attack_result_id: "existing-attack",
-          conversation_id: "conv-1",
-          outcome: "undetermined",
-          last_response: { id: "p-resp" },
-        },
-      } as never)
+      mockSendResult.mockResolvedValue(reply)
       render(
         <TestWrapper>
           <ChatWindow
             {...defaultProps}
             defaultsReady={false}
+            labels={{ ...defaultProps.labels, operation: "config_op_v2" }}
+            onAttackChange={onAttackChange}
             attackResultId="existing-attack"
             conversationId="conv-1"
             activeConversationId="conv-1"
@@ -6493,11 +6509,16 @@ describe("ChatWindow Integration", () => {
       await user.type(input, 'replying in an existing attack')
       await user.keyboard('{Enter}')
 
-      // The reply goes through: addMessage is called, no createAttack is issued.
       await waitFor(() => {
-        expect(mockedAttacksApi.addMessage).toHaveBeenCalled()
-      }, { timeout: 8000 })
+        expect(onAttackChange).toHaveBeenCalledWith(expect.objectContaining({
+          operation: "original_op", labels: { team: "original_team" },
+        }))
+      })
+      expect(mockedAttacksApi.submitMessageSend).toHaveBeenCalledWith(
+        "existing-attack", expect.objectContaining({ target_conversation_id: "conv-1" }),
+      )
       expect(mockedAttacksApi.createAttack).not.toHaveBeenCalled()
+      expect(mockedAttacksApi.updateAttack).not.toHaveBeenCalled()
     })
 
     it('blocks the first message of a new attack while defaults are loading', async () => {
@@ -6507,12 +6528,118 @@ describe("ChatWindow Integration", () => {
       await user.type(input, 'starting a brand new attack')
       await user.keyboard('{Enter}')
 
-      // Neither createAttack nor addMessage fires while the new attack's
-      // attribution source (server defaults) is still loading.
-      await waitFor(() => {
-        expect(mockedAttacksApi.createAttack).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
+      expect(input).toHaveValue('starting a brand new attack')
+      expect(mockedAttacksApi.createAttack).not.toHaveBeenCalled()
+      expect(mockedAttacksApi.submitMessageSend).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      { name: "defaults start loading", ready: true, generation: "gen-1", defaultsReady: false },
+      { name: "a new generation is already ready", ready: true, generation: "gen-2", defaultsReady: true },
+      { name: "the runtime becomes unavailable", ready: false, generation: "gen-1", defaultsReady: true },
+    ])('preserves a prepared draft when $name before attack creation', async (
+      change: { name: string; ready: boolean; generation: string; defaultsReady: boolean },
+    ) => {
+      const user = userEvent.setup()
+      const runtime = jest.spyOn(runtimeHooks, "useRuntime").mockReturnValue({
+        ready: true, state: "ready", generation: "gen-1",
       })
-      expect(mockedAttacksApi.addMessage).not.toHaveBeenCalled()
+      const file = new File(["image content"], "draft.png", { type: "image/png" })
+      const props = {
+        ...defaultProps,
+        activeTarget: makeTarget({
+          capabilities: buildCapabilities({
+            supports_multi_message_pieces: true,
+            supported_input_modalities: ["text", "image_path"],
+          }),
+        }),
+      }
+      const pieces: Awaited<ReturnType<typeof messageMapper.buildMessagePieces>> = [
+        { data_type: "text", original_value: "prepared draft" },
+        { data_type: "image_path", original_value: "aW1hZ2U=" },
+      ]
+      let resolvePieces: (value: typeof pieces) => void = () => {}
+      mockedMapper.buildMessagePieces.mockReturnValueOnce(new Promise((resolve) => { resolvePieces = resolve }))
+      mockedMapper.buildMessagePieces.mockResolvedValue(pieces)
+      mockedMapper.backendMessagesToFrontend.mockReturnValue([])
+      mockSendResult.mockResolvedValue({
+        ...reply,
+        attack: {
+          ...savedAttack,
+          attack_result_id: "default-created-attack",
+          conversation_id: "default-created-conversation",
+          operation: "config_op_v2",
+        },
+      })
+      const rendered = render(<TestWrapper><ChatWindow {...props} /></TestWrapper>)
+      const input = screen.getByRole('textbox')
+      await user.type(input, 'prepared draft')
+      await user.upload(screen.getByTestId('file-input'), file)
+      await user.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(mockedMapper.buildMessagePieces).toHaveBeenCalledTimes(1)
+
+      const nextRuntime: RuntimeReadiness = {
+        ready: change.ready, state: change.ready ? "ready" : "unavailable", generation: change.generation,
+      }
+      runtime.mockReturnValue(nextRuntime)
+      rendered.rerender(
+        <TestWrapper>
+          <ChatWindow {...props} defaultsReady={change.defaultsReady} labels={{ operation: "config_op_v2" }} />
+        </TestWrapper>,
+      )
+      await act(async () => { resolvePieces(pieces) })
+
+      expect(await screen.findByText(/Runtime or default labels changed while preparing this message/)).toBeInTheDocument()
+      expect(input).toHaveValue('prepared draft')
+      expect(mockedAttacksApi.createAttack).not.toHaveBeenCalled()
+      expect(mockedAttacksApi.submitMessageSend).not.toHaveBeenCalled()
+
+      runtime.mockReturnValue({ ready: true, state: "ready", generation: "gen-2" })
+      rendered.rerender(
+        <TestWrapper>
+          <ChatWindow {...props} defaultsReady={true} labels={{ operation: "config_op_v2" }} />
+        </TestWrapper>,
+      )
+      await user.click(screen.getByRole('button', { name: 'Send message' }))
+      await waitFor(() => expect(mockedAttacksApi.submitMessageSend).toHaveBeenCalledTimes(1))
+      expect(mockedAttacksApi.createAttack).toHaveBeenCalledWith(expect.objectContaining({
+        labels: { operation: "config_op_v2" },
+      }))
+      expect(mockedMapper.buildMessagePieces).toHaveBeenLastCalledWith(
+        'prepared draft', expect.arrayContaining([expect.objectContaining({ file })]),
+      )
+    })
+
+    it('blocks branches while defaults load and uses refreshed labels when creation resumes', async () => {
+      const user = userEvent.setup()
+      mockedAttacksApi.getMessages.mockResolvedValue({ messages: [] })
+      mockedMapper.backendMessagesToFrontend.mockReturnValue([{ role: "assistant", content: "Saved reply" }])
+      const props = {
+        ...defaultProps,
+        attackResultId: "existing-attack",
+        conversationId: "conv-1",
+        activeConversationId: "conv-1",
+      }
+      const rendered = render(<TestWrapper><ChatWindow {...props} defaultsReady={false} /></TestWrapper>)
+      await user.click(await screen.findByTestId('branch-attack-btn-0'))
+      const create = await screen.findByRole('button', { name: 'Create attack' })
+      expect(create).toBeDisabled()
+      await user.click(create)
+      expect(mockedAttacksApi.createAttack).not.toHaveBeenCalled()
+
+      rendered.rerender(
+        <TestWrapper>
+          <ChatWindow {...props} defaultsReady={true} labels={{ operation: "config_op_v2" }} />
+        </TestWrapper>,
+      )
+      expect(create).toBeEnabled()
+      await user.click(create)
+      expect(mockedAttacksApi.createAttack).toHaveBeenCalledWith(expect.objectContaining({
+        source_conversation_id: "conv-1",
+        cutoff_index: 0,
+        labels: { operation: "config_op_v2" },
+      }))
     })
   })
 })

@@ -541,7 +541,7 @@ function ScenarioDetailContent({
       defaultObjectiveTarget={defaultObjectiveTarget}
       defaultAdversarialTarget={defaultAdversarialTarget}
       labels={labels}
-                    defaultsReady={defaultsReady}
+      defaultsReady={defaultsReady}
       onNavigate={onNavigate}
     />
   )
@@ -1399,7 +1399,7 @@ function ScenarioLaunchForm({
                   </Button>
                   <Button
                     appearance="primary"
-                    disabled={submitting}
+                    disabled={submitting || !runtime.ready || !defaultsReady}
                     onClick={() => void handleLaunchConfirmed()}
                     data-testid="confirm-launch-scenario-btn"
                   >

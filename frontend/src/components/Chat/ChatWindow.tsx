@@ -343,6 +343,10 @@ export default function ChatWindow({
   const [isNarrowScreen, setIsNarrowScreen] = useState(matchesNarrowScreen)
   const [isConverterPanelOpen, setIsConverterPanelOpen] = useState(false)
   const runtime = useRuntime()
+  const launchStateRef = useRef({ generation: runtime.generation, ready: runtime.ready, defaultsReady })
+  useLayoutEffect(() => {
+    launchStateRef.current = { generation: runtime.generation, ready: runtime.ready, defaultsReady }
+  }, [runtime.generation, runtime.ready, defaultsReady])
   // Conversation-wide preference for rendering message text as Markdown.
   const { preferences, updatePreferences } = useUserPreferences()
   const globalMarkdown = preferences.chatMarkdown
@@ -821,7 +825,7 @@ export default function ChatWindow({
   ): Promise<ChatSendOutcome> => {
     if (
       !runtime.ready
-      || (!attackResultId && !defaultsReady)  // new attacks only; replies use the attack's saved labels
+      || (!attackResultId && !defaultsReady)
       || !activeTarget
       || isLoadingAttack
       || isLoadingMessages
@@ -938,6 +942,11 @@ export default function ChatWindow({
       let currentConversationId = conversationId
       let currentActiveConversationId = activeConversationId
       if (!currentAttackResultId) {
+        const currentLaunchState = launchStateRef.current
+        if (currentLaunchState.generation !== operation.converterGeneration
+          || !currentLaunchState.ready || !currentLaunchState.defaultsReady) {
+          throw new Error('Runtime or default labels changed while preparing this message. Your draft is preserved. Retry after default labels finish loading.')
+        }
         const createRequest: CreateAttackRequest = {
           target_registry_name: activeTarget.target_registry_name,
           name: pendingObjective || undefined,
@@ -1279,7 +1288,7 @@ export default function ChatWindow({
   ])
 
   const confirmBranch = async (): Promise<void> => {
-    if (!branchRequest || !branchTarget || branchingRef.current || targetsLoading || targetsError || !defaultsReady) return
+    if (!branchRequest || !branchTarget || branchingRef.current || targetsLoading || targetsError || !runtime.ready || !defaultsReady) return
     if (!isBranchTargetAvailable) {
       setBranchError('The destination target changed or is no longer registered. Select a target again.')
       return
@@ -1579,7 +1588,7 @@ export default function ChatWindow({
                 appearance="primary"
                 onClick={confirmBranch}
                 disabled={!branchTarget || targetsLoading || Boolean(targetsError) || isBranching
-                  || !isBranchTargetAvailable || !defaultsReady}
+                  || !isBranchTargetAvailable || !runtime.ready || !defaultsReady}
               >
                 Create attack
               </Button>

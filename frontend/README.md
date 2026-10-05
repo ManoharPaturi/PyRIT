@@ -19,6 +19,15 @@ Failed runs offer **Resume run** on the run page and **Resume** in Scanner Histo
 See the [GUI guide](../doc/gui/0_gui.md#resuming-a-failed-scanner-run) for resume
 behavior and the saved launch configuration requirement.
 
+## Default labels after runtime changes
+
+When the runtime configuration changes, CoPyRIT reloads the server's default
+labels before allowing new chat attacks, branches, or scans. Browser label
+overrides and saved attack/run attribution are preserved. If loading fails,
+use **Retry default labels** in the error banner without restarting the runtime.
+If the runtime changes while preparing a new chat message, the draft is kept
+so you can send it again after loading finishes.
+
 ## Development
 
 ```bash
