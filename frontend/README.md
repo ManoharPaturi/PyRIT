@@ -25,6 +25,8 @@ When the runtime configuration changes, CoPyRIT reloads the server's default
 labels before allowing new chat attacks, branches, or scans. Browser label
 overrides and saved attack/run attribution are preserved. If loading fails,
 use **Retry default labels** in the error banner without restarting the runtime.
+The interface stays mounted while the runtime is unavailable, even if its
+readiness response has no generation; defaults remain unloaded until recovery.
 If the runtime changes while preparing a new chat message, the draft is kept
 so you can send it again after loading finishes.
 

@@ -367,6 +367,21 @@ describe('Shared new run labels', () => {
       await act(async () => { jest.advanceTimersByTime(2_000) })
     }
 
+    it('keeps the app mounted when an unavailable runtime response omits its generation', async () => {
+      const mockGetReadiness = runtimeApi.getReadiness as jest.Mock
+      mockGetReadiness.mockResolvedValue({ ready: false, state: 'unavailable' })
+      renderApp('/')
+
+      await screen.findByText(/PyRIT runtime: unavailable/)
+      expect(screen.getByRole('button', { name: 'Home', exact: true })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit operation, currently config_op' }))
+        .not.toBeInTheDocument()
+
+      await pollGeneration('gen-1')
+      expect(await screen.findByRole('button', { name: 'Edit operation, currently config_op' }))
+        .toBeInTheDocument()
+    })
+
     it('refetches once per generation and keeps user overrides on launch', async () => {
       const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
       renderApp()

@@ -220,7 +220,9 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
   const [serverDefaults, setServerDefaults] = useState<ServerDefaults | null>(null)
   const [defaultsRevision, setDefaultsRevision] = useState(0)
   const defaultLabels = serverDefaults?.labels ?? DEFAULT_GLOBAL_LABELS
-  const defaultsCurrent = serverDefaults?.generation === generation && serverDefaults.revision === defaultsRevision
+  const defaultsCurrent = serverDefaults !== null
+    && serverDefaults.generation === generation
+    && serverDefaults.revision === defaultsRevision
   const defaultsError = defaultsCurrent ? serverDefaults.error : null
   const defaultsReady = defaultsCurrent && !defaultsError
   const globalLabels = useMemo<Record<string, string>>(() => Object.fromEntries(
