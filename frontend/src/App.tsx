@@ -125,6 +125,7 @@ interface LoadedAttack {
   labels: Record<string, string> | null
   operator: string | null
   target: TargetInfo | null
+  targetUnbound?: boolean
   createdTarget?: TargetInstance
   relatedConversationIds: string[]
   objective: string
@@ -378,6 +379,7 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
           labels: attack.labels ?? {},
           operator: attack.operator ?? null,
           target: attack.target ?? null,
+          targetUnbound: attack.target_unbound === true,
           relatedConversationIds: attack.related_conversations
             ? attack.related_conversations
                 .filter((reference) => reference.conversation_type === 'pruned')
@@ -437,9 +439,16 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
     attackTarget: readyAttack?.target ?? null,
     attackTargetSource: readyAttack?.targetSource ?? 'persisted',
     createdTarget: readyAttack?.createdTarget,
+    targetUnbound: readyAttack?.targetUnbound,
     createdTargetGeneration: readyAttack?.targetGeneration,
   })
-  const activeTarget = routeAttackId ? resolvedChatTarget : draftTarget
+  const [unboundTarget, setUnboundTarget] = useState<{ attackId: string; target: TargetReference | null } | null>(null)
+  const selectedUnboundTarget = !registry.loading && !registry.error
+    && unboundTarget?.attackId === routeAttackId && unboundTarget?.target
+    ? resolveTargetReference(unboundTarget.target, registry.targets) : null
+  const activeTarget = targetResolutionStatus === 'unbound'
+    ? selectedUnboundTarget
+    : routeAttackId ? resolvedChatTarget : draftTarget
   const activeConversationId = readyAttack
     ? routeConversationId ?? readyAttack.mainConversationId
     : null
@@ -478,11 +487,11 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
     arId: string,
     convId: string,
     objective?: string,
-    selectedTarget?: TargetInstance,
+    selectedTarget?: TargetInstance | null,
   ) => {
     // Seed the freshly-created attack synchronously and tell the loader to skip
     // its next fetch for this id, so the attack opens without a redundant load.
-    const createdTarget = selectedTarget ?? activeTarget
+    const createdTarget = selectedTarget === undefined ? activeTarget : selectedTarget
     const target: TargetInfo | null = createdTarget
       ? {
           target_type: targetType(createdTarget),
@@ -505,6 +514,7 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
       labels: null,
       operator: null,
       target,
+      targetUnbound: createdTarget === null,
       createdTarget: createdTarget ?? undefined,
       relatedConversationIds: [],
       objective: objective ?? '',
@@ -535,6 +545,12 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
       current && current.id === attack.attack_result_id
         ? {
             ...current,
+            target: attack.target ?? null,
+            targetUnbound: attack.target_unbound === true,
+            targetSource: 'persisted',
+            relatedConversationIds: (attack.related_conversations ?? [])
+              .filter((reference) => reference.conversation_type === 'pruned')
+              .map((reference) => reference.conversation_id),
             objective: attack.objective ?? '',
             outcome: attack.outcome ?? 'undetermined',
             automatedScore: attack.automated_score ?? null,
@@ -580,9 +596,12 @@ function AppContent({ operatorAlias }: { operatorAlias: string | null }) {
       targetsLoading={registry.loading}
       targetsError={registry.error}
       onRefreshTargets={registry.refresh}
-      onSelectTarget={(target: TargetInstance | null) => setDraftSession((current) => ({
-        ...current, target: target ? targetReference(target) : null,
-      }))}
+      onSelectTarget={(target: TargetInstance | null) => {
+        if (readyAttack?.targetUnbound) {
+          setUnboundTarget({ attackId: readyAttack.id, target: target ? targetReference(target) : null })
+        }
+        else setDraftSession((current) => ({ ...current, target: target ? targetReference(target) : null }))
+      }}
       defaultBranchTarget={targetDefaults.objectiveTarget}
       attackResultId={readyAttack ? readyAttack.id : null}
       conversationId={readyAttack ? readyAttack.mainConversationId : null}

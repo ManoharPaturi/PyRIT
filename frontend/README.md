@@ -22,13 +22,15 @@ behavior and the saved launch configuration requirement.
 ## Default labels after runtime changes
 
 When the runtime configuration changes, CoPyRIT reloads the server's default
-labels before allowing new chat attacks, branches, or scans. Browser label
+labels before allowing new chat attacks, copies saved to new attacks, or scans. Browser label
 overrides and saved attack/run attribution are preserved. If loading fails,
 use **Retry default labels** in the error banner without restarting the runtime.
 The interface stays mounted while the runtime is unavailable, even if its
 readiness response has no generation; defaults remain unloaded until recovery.
-If the runtime changes while preparing a new chat message, the draft is kept
-so you can send it again after loading finishes.
+If the runtime changes while preparing a new chat message or saving a draft to
+a new attack, the draft is kept so you can retry after loading finishes. Copies
+and drafts saved to an existing attack remain available during defaults reloads
+and keep that attack's attribution.
 
 ## Development
 
