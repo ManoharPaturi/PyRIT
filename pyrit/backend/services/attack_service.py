@@ -88,7 +88,6 @@ from pyrit.models import (
     Message,
     MessagePiece,
     TargetIdentifier,
-    UndeterminedScoreError,
 )
 from pyrit.models.messages.tool_content import validate_tool_conversation
 from pyrit.prompt_target import PromptTarget
@@ -872,13 +871,7 @@ class AttackService:
         # Follow the attack-side contract of attack_outcome_from_score (#3181): read the
         # typed score value instead of comparing the raw string, and treat an undetermined
         # score as neither achievement nor refutation.
-        if automated_score is None:
-            outcome = AttackOutcome.UNDETERMINED
-        else:
-            try:
-                outcome = attack_outcome_from_score(automated_score)
-            except UndeterminedScoreError:
-                outcome = AttackOutcome.UNDETERMINED
+        outcome = AttackOutcome.UNDETERMINED if automated_score is None else attack_outcome_from_score(automated_score)
         if outcome is AttackOutcome.UNDETERMINED or automated_score is None:
             outcome_reason = None
         else:
