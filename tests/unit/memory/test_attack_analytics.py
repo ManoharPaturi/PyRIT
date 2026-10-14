@@ -1759,9 +1759,7 @@ def test_mssql_filter_source_lateral_is_added_once_per_compiler() -> None:
             )
         ]
     )
-    query = AttackAnalyticsQuery(
-        filters=filters, group_by=AttackAnalyticsDimension(name="operation")
-    )
+    query = AttackAnalyticsQuery(filters=filters, group_by=AttackAnalyticsDimension(name="operation"))
     compiler = AttackAnalyticsQueryCompiler(dialect="mssql", filters=filters)
     dialect = mssql.dialect(deprecate_large_types=True)
 
