@@ -68,6 +68,7 @@ from pyrit.backend.services.pagination import (
 )
 from pyrit.backend.services.target_service import get_target_service
 from pyrit.common.utils import to_sha256
+from pyrit.executor.attack import attack_outcome_from_score
 from pyrit.memory import (
     AttackResultKeysetCursor,
     CentralMemory,
@@ -89,7 +90,6 @@ from pyrit.models import (
     TargetIdentifier,
     UndeterminedScoreError,
 )
-from pyrit.executor.attack import attack_outcome_from_score
 from pyrit.models.messages.tool_content import validate_tool_conversation
 from pyrit.prompt_target import PromptTarget
 
