@@ -179,8 +179,13 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
   }))
   const nextRunId = useRef(0)
   const activeRun = useRef<number | null>(null)
+  // Which run currently owns each input's outcome slot. Two conversions started in
+  // the same tick own different inputs, so each must be allowed to commit its own
+  // results instead of the later run superseding the earlier one's whole commit.
+  const runOwnership = useRef<Map<string, number>>(new Map())
 
   if (state.scopeKey !== scopeKey) {
+    runOwnership.current.clear()
     setState({
       ...reconcileInputs(state, inputs), scopeKey, generation, stageResults: {}, errors: {}, applied: {},
       workingInputs: {}, runId: state.runId + 1, isConverting: false,
@@ -190,6 +195,7 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
     // edits follow the same rule reconcileInputs applies: they survive only
     // when their underlying piece is unchanged, so a stale edit can never be
     // applied to text the user swapped in with the new generation.
+    runOwnership.current.clear()
     const next = reconcileInputs(state, inputs)
     setState({
       ...next,
@@ -291,6 +297,9 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
     const runId = ++nextRunId.current
     activeRun.current = runId
     const affected = new Set(selected.map(({ input }: ConversionJob) => input.id))
+    for (const { input } of selected) {
+      runOwnership.current.set(input.id, runId)
+    }
     setState((current: ConversionState) => ({
       ...current,
       runId,
@@ -329,11 +338,13 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
       }
     }))
     if (activeRun.current === runId) activeRun.current = null
+    const stillConverting = activeRun.current !== null
     setState((current: ConversionState) => {
-      if (current.runId !== runId) return current
       const stageResults = { ...current.stageResults }
       const errors = { ...current.errors }
       for (const outcome of outcomes) {
+        // A newer run that selected this input owns its outcome slot now.
+        if (runOwnership.current.get(outcome.input.id) !== runId) continue
         const input = current.inputs.find((candidate: VersionedInput) => candidate.id === outcome.input.id)
         if (
           !input || input.revision !== outcome.input.revision
@@ -342,7 +353,7 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
         if (outcome.stages) stageResults[input.id] = outcome.stages
         else if (outcome.error) errors[input.id] = outcome.error
       }
-      return { ...current, stageResults, errors, isConverting: false }
+      return { ...current, stageResults, errors, isConverting: stillConverting ? current.isConverting : false }
     })
   }
 
@@ -360,6 +371,7 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
 
   const clearAll = useCallback((): void => {
     activeRun.current = null
+    runOwnership.current.clear()
     setState((current: ConversionState) => ({
       ...current, runId: 0, isConverting: false, workingInputs: {}, stageResults: {}, errors: {}, applied: {},
     }))
@@ -380,6 +392,7 @@ export function usePieceConverters(inputs: ConverterInputPiece[], scopeKey?: str
     pipelines?: Record<string, ConverterPipelineStage[]>,
   ): void => {
     activeRun.current = null
+    runOwnership.current.clear()
     const restoredPipelines: Record<string, ConverterPipelineStage[]> = { ...pipelines }
     if (!pipelines) {
       for (const conversion of Object.values(conversions)) {

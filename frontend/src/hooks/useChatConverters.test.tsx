@@ -170,3 +170,56 @@ describe('useChatConverters across runtime generation changes', () => {
     expect(result.current.stageResults['text']).toBeUndefined()
   })
 })
+
+describe('useChatConverters concurrent conversion runs', () => {
+  it('keeps the first piece result when a second conversion starts in the same tick', async () => {
+    let previewCall = 0
+    mockedPreview.mockImplementation(({ original_value }: { original_value: string }) => {
+      previewCall += 1
+      return Promise.resolve({
+        original_value,
+        steps: [
+          {
+            converter_id: 'base64-default', converter_type: 'Base64Converter',
+            input_value: original_value, input_data_type: 'text',
+            output_value: `out-${previewCall}`, output_data_type: 'text',
+          },
+        ],
+      })
+    })
+    const attachments = [{
+      draftId: 'att-1', type: 'image', name: 'photo.png', url: 'blob:photo',
+      mimeType: 'image/png', size: 10, sourceValue: 'photo source value', sourceDataType: 'image_path',
+    }]
+    const { result } = renderHook(
+      ({ text }: { text: string }) => useChatConverters(text, attachments),
+      { initialProps: { text: 'original text' } },
+    )
+    act(() => {
+      result.current.setPipeline('text', (stages) => [...stages, { id: 'stage-1', converterId: 'base64-default' }])
+      result.current.setPipeline('image', (stages) => [...stages, { id: 'stage-1', converterId: 'base64-default' }])
+    })
+    await act(async () => {
+      result.current.convert('text')
+    })
+    await waitFor(() => {
+      expect(result.current.stageResults['text']?.length).toBe(1)
+      expect(result.current.stageResults['att-1']?.length).toBe(1)
+    })
+    const textBefore = result.current.stageResults['text']![0].value
+    const attBefore = result.current.stageResults['att-1']![0].value
+    expect(textBefore).not.toBe(attBefore)
+
+    // Two piece scoped reruns started in one tick: each input keeps its own update.
+    await act(async () => {
+      void result.current.convert('text')
+      void result.current.convert('image')
+    })
+
+    await waitFor(() => {
+      expect(result.current.stageResults['text']![0].value).not.toBe(textBefore)
+    })
+    expect(result.current.stageResults['att-1']![0].value).not.toBe(attBefore)
+    expect(result.current.isConverting).toBe(false)
+  })
+})
