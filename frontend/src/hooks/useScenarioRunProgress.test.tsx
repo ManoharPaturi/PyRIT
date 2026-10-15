@@ -620,6 +620,36 @@ describe('useScenarioRunProgress', () => {
     expect(mockGetRunProgress.mock.calls.length).toBeLessThanOrEqual(afterFirstCycle + 3)
   })
 
+  it('recovers a finished run whose cursor goes missing once', async () => {
+    jest.useFakeTimers()
+    let call = 0
+    mockGetRunProgress.mockImplementation(() => {
+      call += 1
+      const stuckFirst = call === 1
+      const final = call === 3
+      return Promise.resolve(
+        makePage({
+          has_more: !final,
+          next_cursor: final ? null : (stuckFirst ? undefined : 'cursor-' + String(call)),
+          run: { ...makePage().run, status: 'COMPLETED' },
+        }),
+      )
+    })
+
+    renderHook(() => useScenarioRunProgress('run-1'))
+    await act(async () => {})
+
+    // The completed run answered has_more without a cursor: polling continues,
+    // and once the cursor recovers the same cycle drains to the final page.
+    expect(mockGetRunProgress.mock.calls.length).toBe(1)
+    await act(async () => { await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS) })
+    expect(mockGetRunProgress.mock.calls.length).toBe(3)
+
+    // The final page arrived without has_more, so polling stops for good.
+    await act(async () => { await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS * 2) })
+    expect(mockGetRunProgress.mock.calls.length).toBe(3)
+  })
+
   it('follows an advancing cursor across pages', async () => {
     jest.useFakeTimers()
     mockGetRunProgress

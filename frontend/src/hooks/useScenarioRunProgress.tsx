@@ -97,8 +97,11 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
             return
           }
           // The cursor did not advance, so refetching would request the same page
-          // forever (the same guard fetchAllPages uses). Stop paging this cycle and
-          // let the regular poll retry from the stored cursor.
+          // forever (the same guard fetchAllPages uses). Schedule the next bounded
+          // poll instead: a finished run only stops after a page without has_more,
+          // and the next response may carry a valid cursor again.
+          schedulePoll()
+          return
         }
         if (isTerminalRunState(page.run.status)) {
           pollingStoppedRef.current = true
