@@ -12,6 +12,8 @@ import {
 
 export const SCENARIO_RUN_POLL_INTERVAL_MS = 2_500
 const PROGRESS_PAGE_LIMIT = 500
+// Same bounding idea as fetchAllPages: a misbehaving cursor must not page forever.
+const MAX_PROGRESS_PAGES_PER_CYCLE = 50
 
 export interface UseScenarioRunProgressResult {
   readonly state: ScenarioRunProgressState
@@ -49,7 +51,8 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
       }
     }
 
-    const fetchPage = async (since: string | null): Promise<void> => {
+    const seenCursors = new Set<string>()
+    const fetchPage = async (since: string | null, depth: number = 0): Promise<void> => {
       if (!active || pollingStoppedRef.current) {
         return
       }
@@ -71,8 +74,15 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
         dispatch({ type: 'apply-page', page, fresh: since === null })
 
         if (page.has_more) {
-          await fetchPage(appliedCursor)
-          return
+          const nextCursor = page.next_cursor
+          if (nextCursor && nextCursor !== since && !seenCursors.has(nextCursor) && depth < MAX_PROGRESS_PAGES_PER_CYCLE) {
+            seenCursors.add(nextCursor)
+            await fetchPage(nextCursor, depth + 1)
+            return
+          }
+          // The cursor did not advance or the page cap was hit, so refetching would
+          // request the same page forever (the same guard fetchAllPages uses). Stop
+          // paging this cycle and let the regular poll retry from the stored cursor.
         }
         if (isTerminalRunState(page.run.status)) {
           pollingStoppedRef.current = true
