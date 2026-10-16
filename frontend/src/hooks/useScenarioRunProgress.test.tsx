@@ -701,4 +701,3 @@ describe('useScenarioRunProgress', () => {
     expect(mockGetRunProgress.mock.calls.length).toBe(MAX_PROGRESS_PAGES_PER_CYCLE + 3)
   })
 })
-
