@@ -20,6 +20,7 @@ jest.mock('@fluentui-contrib/react-virtualizer', () => ({
   }),
 }))
 import { DEFAULT_HISTORY_FILTERS } from './historyFilters'
+import type { FilterOption } from '@/types'
 
 jest.mock('./AttackHistory.styles', () => ({
   useAttackHistoryStyles: () => new Proxy({}, { get: () => '' }),
@@ -36,7 +37,7 @@ describe('HistoryFiltersBar', () => {
     attackTypeOptions: [] as string[],
     converterOptions: [] as string[],
     operatorOptions: [] as string[],
-    operationOptions: [] as string[],
+    operationOptions: [] as FilterOption[],
     otherLabelOptions: [] as string[],
   }
 
@@ -210,12 +211,12 @@ describe('HistoryFiltersBar', () => {
     )
   })
 
-  it('should call onFiltersChange when operation filter is selected', async () => {
+  it('should select a saved operation by name and filter by its ID', async () => {
     const onFiltersChange = jest.fn()
     const props = {
       ...defaultProps,
       onFiltersChange,
-      operationOptions: ['op_alpha', 'op_beta'],
+      operationOptions: [{ value: 'id-alpha', label: 'op_alpha' }, { value: 'id-beta', label: 'op_beta' }],
     }
 
     render(
@@ -231,7 +232,7 @@ describe('HistoryFiltersBar', () => {
     fireEvent.click(option)
 
     expect(onFiltersChange).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: ['op_beta'] })
+      expect.objectContaining({ operationId: ['id-beta'] })
     )
   })
 
