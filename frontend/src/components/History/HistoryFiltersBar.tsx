@@ -9,11 +9,16 @@ import {
   mergeClasses,
 } from '@fluentui/react-components'
 import { FilterDismissRegular } from '@fluentui/react-icons'
+import { Virtualizer, useStaticVirtualizerMeasure } from '@fluentui-contrib/react-virtualizer'
 import SearchableMultiCombobox from '@/components/SearchableMultiCombobox'
 import type { FilterOption } from '@/types'
 import { DEFAULT_HISTORY_FILTERS } from './historyFilters'
 import type { HistoryFilters } from './historyFilters'
 import { useAttackHistoryStyles } from './AttackHistory.styles'
+
+const LABEL_OPTION_HEIGHT_PX = 32
+// Rendered before the listbox has been measured (jsdom never fires the observer).
+const LABEL_FALLBACK_RENDERED_OPTIONS = 12
 
 const NO_CONVERTERS_SENTINEL = '__no_converters__'
 
@@ -119,6 +124,12 @@ export default function HistoryFiltersBar({
   const filteredLabelOptions = otherLabelOptions.filter(
     l => !labelSearchText || l.toLowerCase().includes(labelSearchText.toLowerCase()),
   )
+  // The label list can reach hundreds of entries, so it renders through a virtualizer
+  // instead of capping the visible options and asking the user to search further.
+  const labelListMeasure = useStaticVirtualizerMeasure<HTMLElement>({
+    defaultItemSize: LABEL_OPTION_HEIGHT_PX,
+    direction: 'vertical',
+  })
 
   return (
     <div className={styles.filters}>
@@ -179,15 +190,31 @@ export default function HistoryFiltersBar({
           onChange={(e) => setFilter('labelSearchText', (e.target as HTMLInputElement).value)}
           data-testid="label-filter"
           freeform
+          positioning={{ autoSize: true }}
+          listbox={{
+            className: styles.labelListbox,
+            ref: labelListMeasure.scrollRef,
+          }}
         >
-          {filteredLabelOptions
-            .slice(0, 50)
-            .map(l => (
-              <Option key={l} value={l}>{l}</Option>
-            ))}
-          {filteredLabelOptions.length > 50 && (
-            <Option disabled value="__more" text={`Type to search more...`}>{`Type to search ${filteredLabelOptions.length - 50} more...`}</Option>
-          )}
+          <Virtualizer
+            numItems={filteredLabelOptions.length}
+            virtualizerLength={labelListMeasure.virtualizerLength || LABEL_FALLBACK_RENDERED_OPTIONS}
+            bufferItems={labelListMeasure.bufferItems}
+            bufferSize={labelListMeasure.bufferSize}
+            itemSize={LABEL_OPTION_HEIGHT_PX}
+            containerSizeRef={labelListMeasure.containerSizeRef}
+          >
+            {(index: number) => (
+              <Option
+                key={filteredLabelOptions[index]}
+                value={filteredLabelOptions[index]}
+                aria-posinset={index + 1}
+                aria-setsize={filteredLabelOptions.length}
+              >
+                {filteredLabelOptions[index]}
+              </Option>
+            )}
+          </Virtualizer>
         </Combobox>
         <SearchableMultiCombobox
           className={styles.filterDropdown}

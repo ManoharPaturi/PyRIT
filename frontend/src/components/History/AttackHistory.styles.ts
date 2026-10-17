@@ -44,6 +44,10 @@ export const useAttackHistoryStyles = makeStyles({
     alignItems: 'center',
     minHeight: MINIMUM_TOUCH_TARGET_SIZE,
   },
+  labelListbox: {
+    maxHeight: '250px',
+    overflowY: 'auto',
+  },
   filterDropdown: {
     minWidth: '160px',
     ...mobileTouchTargetHeight,

@@ -1,6 +1,24 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { FluentProvider, webLightTheme } from '@fluentui/react-components'
 import HistoryFiltersBar from './HistoryFiltersBar'
+
+// jsdom cannot drive the IntersectionObserver based virtualizer, so render every
+// item through a pass through and verify the combobox wiring around it.
+jest.mock('@fluentui-contrib/react-virtualizer', () => ({
+  Virtualizer: ({ numItems, children }: { numItems: number; children: (index: number, isScrolling: boolean) => ReactNode }) => (
+    <>
+      {Array.from({ length: numItems }, (_, index) => children(index, false))}
+    </>
+  ),
+  useStaticVirtualizerMeasure: () => ({
+    virtualizerLength: 0,
+    bufferItems: 0,
+    bufferSize: 0,
+    scrollRef: jest.fn(),
+    containerSizeRef: { current: 0 },
+  }),
+}))
 import { DEFAULT_HISTORY_FILTERS } from './historyFilters'
 
 jest.mock('./AttackHistory.styles', () => ({
@@ -217,7 +235,7 @@ describe('HistoryFiltersBar', () => {
     )
   })
 
-  it('should count remaining hidden label options from the filtered set while searching', () => {
+  it('should show every matching label through the virtualized list while searching', async () => {
     const labels = [
       ...Array.from({ length: 60 }, (_, i) => `label:${String(i).padStart(3, '0')}`),
       ...Array.from({ length: 40 }, (_, i) => `other:${String(i).padStart(3, '0')}`),
@@ -234,11 +252,39 @@ describe('HistoryFiltersBar', () => {
       </TestWrapper>
     )
 
-    // eslint-disable-next-line no-console
-    // Options only mount once the combobox opens
     fireEvent.click(screen.getByTestId('label-filter'))
-    // 60 of the 100 labels match the search, 50 are shown: the hint says 10 more
-    expect(document.body.textContent).toContain('Type to search 10 more...')
+    // The whole filtered set is one scrollable list: matches render, non matches do
+    // not, and the capped page with its search hint is gone.
+    expect(await screen.findByText('label:000')).toBeInTheDocument()
+    expect(await screen.findByText('label:059')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('other:000')
+    })
+    expect(document.body.textContent).not.toContain('Type to search')
+  })
+
+  it('should select a label option from the virtualized list', async () => {
+    const onFiltersChange = jest.fn()
+    const labels = Array.from({ length: 80 }, (_, i) => `label:${String(i).padStart(3, '0')}`)
+    const props = {
+      ...defaultProps,
+      onFiltersChange,
+      otherLabelOptions: labels,
+    }
+
+    render(
+      <TestWrapper>
+        <HistoryFiltersBar {...props} />
+      </TestWrapper>
+    )
+    fireEvent.click(screen.getByTestId('label-filter'))
+    const first = await screen.findByText('label:000')
+    fireEvent.click(first)
+    await waitFor(() => {
+      expect(onFiltersChange).toHaveBeenCalledWith(
+        expect.objectContaining({ otherLabels: [first.textContent] })
+      )
+    })
   })
 
   it('should update label search text when typing in label combobox', () => {
