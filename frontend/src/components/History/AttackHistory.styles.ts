@@ -44,7 +44,10 @@ export const useAttackHistoryStyles = makeStyles({
     alignItems: 'center',
     minHeight: MINIMUM_TOUCH_TARGET_SIZE,
   },
-  labelListbox: {
+  // Inner scrolling surface for the virtualized label list. The bound lives here
+  // rather than on the listbox element because autoSize writes an inline max
+  // height on the popup, which would override a class level limit.
+  labelScrollSurface: {
     maxHeight: '250px',
     overflowY: 'auto',
   },

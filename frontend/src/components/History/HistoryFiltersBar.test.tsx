@@ -288,6 +288,72 @@ describe('HistoryFiltersBar', () => {
     })
   })
 
+  it('should activate the last filtered option when End is pressed', async () => {
+    const labels = Array.from({ length: 60 }, (_, i) => `label:${String(i).padStart(3, '0')}`)
+    const props = {
+      ...defaultProps,
+      otherLabelOptions: labels,
+      filters: { ...defaultProps.filters, labelSearchText: 'label:' },
+    }
+
+    render(
+      <TestWrapper>
+        <HistoryFiltersBar {...props} />
+      </TestWrapper>
+    )
+
+    fireEvent.click(screen.getByTestId('label-filter'))
+    await screen.findByText('label:059')
+
+    fireEvent.keyDown(screen.getByTestId('label-filter'), { key: 'End' })
+
+    const active = document.querySelector('[data-activedescendant]')
+    expect(active?.textContent).toBe('label:059')
+  })
+
+  it('should activate the first filtered option when Home is pressed after jumping to the end', async () => {
+    const labels = Array.from({ length: 60 }, (_, i) => `label:${String(i).padStart(3, '0')}`)
+    const props = {
+      ...defaultProps,
+      otherLabelOptions: labels,
+      filters: { ...defaultProps.filters, labelSearchText: 'label:' },
+    }
+
+    render(
+      <TestWrapper>
+        <HistoryFiltersBar {...props} />
+      </TestWrapper>
+    )
+
+    const input = screen.getByTestId('label-filter')
+    fireEvent.click(input)
+    await screen.findByText('label:059')
+
+    fireEvent.keyDown(input, { key: 'End' })
+    fireEvent.keyDown(input, { key: 'Home' })
+
+    const active = document.querySelector('[data-activedescendant]')
+    expect(active?.textContent).toBe('label:000')
+  })
+
+  it('should leave Home and End to the input while the dropdown is closed', () => {
+    const props = {
+      ...defaultProps,
+      otherLabelOptions: ['team:red', 'team:blue'],
+    }
+
+    render(
+      <TestWrapper>
+        <HistoryFiltersBar {...props} />
+      </TestWrapper>
+    )
+
+    fireEvent.keyDown(screen.getByTestId('label-filter'), { key: 'End' })
+
+    expect(document.querySelector('[data-activedescendant]')).toBeNull()
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
   it('should update label search text when typing in label combobox', () => {
     const onFiltersChange = jest.fn()
     const props = {
