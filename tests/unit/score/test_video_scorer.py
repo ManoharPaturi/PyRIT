@@ -582,9 +582,7 @@ async def test_video_audio_scorer_keeps_source_when_extraction_returns_it(video_
     source_video = Path(video_converter_sample_video.converted_value)
     assert source_video.exists()
 
-    with patch.object(
-        AudioTranscriptHelper, "extract_audio_from_video", return_value=str(source_video)
-    ):
+    with patch.object(AudioTranscriptHelper, "extract_audio_from_video", return_value=str(source_video)):
         scorer = VideoTrueFalseScorer(
             image_capable_scorer=image_scorer,
             audio_scorer=audio_scorer,
