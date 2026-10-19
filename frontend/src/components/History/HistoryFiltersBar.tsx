@@ -175,6 +175,8 @@ export default function HistoryFiltersBar({
   const [labelOpen, setLabelOpen] = useState(false)
   const labelActiveDescendant = useRef<ActiveDescendantImperativeRef | null>(null)
   const labelScrollSurface = useRef<HTMLDivElement | null>(null)
+  // Identifies the newest Home/End activation request so stale retries abort.
+  const labelActivationRequest = useRef(0)
   const setLabelScrollSurface = useCallback(
     (el: HTMLDivElement | null) => {
       labelScrollSurface.current = el
@@ -187,6 +189,9 @@ export default function HistoryFiltersBar({
   // the scroll surface survives close and reopen, so without this a reopened
   // popup would resume partway down the previous result set.
   useEffect(() => {
+    // Invalidate any pending activation along with the re-anchor; a retry
+    // that fires after unmount finds the surface ref already cleared.
+    labelActivationRequest.current++
     if (labelOpen) labelScrollSurface.current?.scrollTo({ top: 0 })
   }, [labelOpen, labelSearchText])
 
@@ -195,13 +200,14 @@ export default function HistoryFiltersBar({
   // filtered set. Handle both keys against the full list: jump the scroll
   // surface so the target option mounts, then activate it through the same
   // controller Fluent's arrow navigation uses.
-  const activateLabelOption = (targetIndex: number, attemptsLeft: number) => {
+  const activateLabelOption = (requestId: number, targetIndex: number, attemptsLeft: number) => {
+    if (requestId !== labelActivationRequest.current) return
     const surface = labelScrollSurface.current
     const target = surface?.querySelector<HTMLElement>(`[${LABEL_OPTION_INDEX_ATTR}="${targetIndex}"]`)
     if (target) {
       labelActiveDescendant.current?.focus(target.id)
     } else if (attemptsLeft > 0) {
-      scheduleLabelActivation(() => activateLabelOption(targetIndex, attemptsLeft - 1))
+      scheduleLabelActivation(() => activateLabelOption(requestId, targetIndex, attemptsLeft - 1))
     }
   }
 
@@ -213,7 +219,7 @@ export default function HistoryFiltersBar({
     if (targetIndex < 0) return
     const surface = labelScrollSurface.current
     if (surface) surface.scrollTop = targetIndex * LABEL_OPTION_HEIGHT_PX
-    activateLabelOption(targetIndex, LABEL_ACTIVATION_ATTEMPTS)
+    activateLabelOption(++labelActivationRequest.current, targetIndex, LABEL_ACTIVATION_ATTEMPTS)
   }
 
   return (

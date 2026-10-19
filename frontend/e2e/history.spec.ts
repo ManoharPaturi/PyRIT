@@ -360,6 +360,71 @@ test.describe("Attack History Filters", () => {
     await expect(surface.locator('[data-label-index="0"]')).toHaveAttribute("aria-checked", "true");
   });
 
+  test("should let the newest of two rapid label navigation keys win", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await mockHistoryAPIs(page, {
+      labels: {
+        team: Array.from({ length: 60 }, (_, i) => String(i).padStart(3, "0")),
+        env: Array.from({ length: 40 }, (_, i) => String(i).padStart(3, "0")),
+      },
+    });
+    await goToHistory(page);
+
+    const labelFilter = page.getByTestId("label-filter");
+    await labelFilter.click();
+    await labelFilter.pressSequentially("team:", { delay: 60 });
+    const surface = page.getByTestId("label-list-scroll-surface");
+    await expect(surface).toBeVisible();
+    const popup = surface.locator("xpath=ancestor-or-self::*[@role='menu'][1]");
+    const activeOptionText = () =>
+      popup.locator("[data-activedescendant]").evaluate((el) => el.textContent?.trim() ?? "");
+
+    for (let round = 0; round < 5; round++) {
+      // Re-anchor at the top, then press End and Home back to back so the
+      // End activation is still retrying when Home lands.
+      await labelFilter.press("Home");
+      await page.waitForTimeout(400);
+      await labelFilter.press("End");
+      await labelFilter.press("Home");
+
+      await expect.poll(activeOptionText).toBe("team:000");
+      // The last key must still be the winner once every pending retry has
+      // had time to fire.
+      await page.waitForTimeout(900);
+      await expect.poll(activeOptionText).toBe("team:000");
+      expect(await surface.evaluate((el) => (el as HTMLElement).scrollTop)).toBeLessThanOrEqual(40);
+    }
+  });
+
+  test("should keep a single filtered label fully visible", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await mockHistoryAPIs(page, {
+      labels: {
+        team: Array.from({ length: 60 }, (_, i) => String(i).padStart(3, "0")),
+        env: Array.from({ length: 40 }, (_, i) => String(i).padStart(3, "0")),
+      },
+    });
+    await goToHistory(page);
+
+    const labelFilter = page.getByTestId("label-filter");
+    await labelFilter.click();
+    await labelFilter.pressSequentially("team:005", { delay: 60 });
+    const surface = page.getByTestId("label-list-scroll-surface");
+    await expect(surface).toBeVisible();
+
+    const only = surface.locator('[data-label-index="0"]');
+    await expect(only).toHaveText("team:005");
+
+    // The whole option row must fit inside the scrolling surface; a block
+    // container let the virtualizer spacers halve the visible height.
+    const optionBox = await only.boundingBox();
+    const surfaceBox = await surface.boundingBox();
+    expect(optionBox).not.toBeNull();
+    expect(surfaceBox).not.toBeNull();
+    expect(optionBox!.height).toBeGreaterThanOrEqual(30);
+    expect(optionBox!.y + optionBox!.height).toBeLessThanOrEqual(surfaceBox!.y + surfaceBox!.height + 1);
+  });
+
   test("should reset filters", async ({ page }) => {
     await mockHistoryAPIs(page);
     await goToHistory(page);
