@@ -425,6 +425,25 @@ test.describe("Attack History Filters", () => {
     expect(optionBox!.y + optionBox!.height).toBeLessThanOrEqual(surfaceBox!.y + surfaceBox!.height + 1);
   });
 
+  test("should preserve every label search character during rapid URL updates", async ({ page }) => {
+    await mockHistoryAPIs(page, {
+      labels: {
+        team: Array.from({ length: 60 }, (_, i) => String(i).padStart(3, "0")),
+      },
+    });
+    await goToHistory(page);
+
+    const labelFilter = page.getByTestId("label-filter");
+    await labelFilter.click();
+    for (const search of ["team:005", "team:059", "team:001", "team:020"]) {
+      await labelFilter.fill("");
+      await labelFilter.pressSequentially(search);
+      await expect(labelFilter).toHaveValue(search);
+      await expect.poll(() => new URL(page.url()).searchParams.get("labelSearch")).toBe(search);
+      await expect(page.getByRole("menuitemcheckbox", { name: search, exact: true })).toBeVisible();
+    }
+  });
+
   test("should reset filters", async ({ page }) => {
     await mockHistoryAPIs(page);
     await goToHistory(page);
