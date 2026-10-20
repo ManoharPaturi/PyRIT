@@ -13,6 +13,7 @@ import httpx
 
 from pyrit.common.deprecation import print_deprecation_message
 from pyrit.models import (
+    ComponentIdentifier,
     Message,
     MessagePiece,
     construct_response_from_request,
@@ -117,6 +118,8 @@ class HTTPXAPITarget(HTTPTarget):
         )
 
         self.http_url = http_url
+        self._endpoint = http_url
+        self._destination_origin = self._get_destination_origin(http_url)
         self.method = method
         self.file_path = file_path
         self.allowed_upload_directory = self._resolve_allowed_upload_directory(allowed_upload_directory)
@@ -129,6 +132,22 @@ class HTTPXAPITarget(HTTPTarget):
         # Validate method
         if self.method not in {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}:
             raise ValueError(f"Invalid HTTP method: {self.method}")
+
+    def _build_identifier(self) -> ComponentIdentifier:
+        """
+        Build the identifier with HTTPX API target-specific parameters.
+
+        Returns:
+            ComponentIdentifier: The identifier for this target instance.
+        """
+        return self._create_identifier(
+            params={
+                "method": self.method,
+                "follow_redirects": self.follow_redirects,
+                "callback_function": getattr(self.callback_function, "__name__", None),
+                "http2": self.http2,
+            },
+        )
 
     @limit_requests_per_minute
     async def _send_prompt_to_target_async(self, *, normalized_conversation: list[Message]) -> list[Message]:

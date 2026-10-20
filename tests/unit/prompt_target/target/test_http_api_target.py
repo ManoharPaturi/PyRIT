@@ -363,3 +363,28 @@ async def test_send_prompt_async_validates_upload_method_after_path(mock_request
         await target.send_prompt_async(message=message)
 
     mock_request.assert_not_called()
+
+
+def test_httpx_api_target_identifier_fields(patch_central_database):
+    target = HTTPXAPITarget(
+        http_url="https://example.com/api/v1",
+        method="POST",
+        http2=True,
+        follow_redirects=False,
+    )
+    identifier = target.get_identifier()
+
+    assert identifier.endpoint == "https://example.com/api/v1"
+    assert identifier.params["method"] == "POST"
+    assert identifier.params["follow_redirects"] is False
+    assert identifier.params["http2"] is True
+    assert target._destination_origin == ("https", "example.com", None)
+
+
+def test_httpx_api_target_identifier_distinguishes_urls_and_methods(patch_central_database):
+    first = HTTPXAPITarget(http_url="https://example.com/api/v1", method="POST")
+    different_url = HTTPXAPITarget(http_url="https://different.org/api/v2", method="POST")
+    different_method = HTTPXAPITarget(http_url="https://example.com/api/v1", method="GET")
+
+    assert first.get_identifier().hash != different_url.get_identifier().hash
+    assert first.get_identifier().hash != different_method.get_identifier().hash
