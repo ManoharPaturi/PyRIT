@@ -7,6 +7,7 @@ import mimetypes
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar, Literal
+from urllib.parse import urlencode
 
 import aiofiles
 import httpx
@@ -53,6 +54,36 @@ class HTTPXAPITarget(HTTPTarget):
             ),
         )
     )
+    _SENSITIVE_QUERY_PATTERNS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "key",
+            "token",
+            "secret",
+            "password",
+            "pwd",
+            "auth",
+            "credential",
+            "sig",
+            "signature",
+        }
+    )
+
+    @classmethod
+    def _is_sensitive_query_param(cls, key: str) -> bool:
+        key_lower = key.lower().replace("-", "_")
+        if any(pattern in key_lower for pattern in cls._SENSITIVE_QUERY_PATTERNS):
+            return True
+        return key_lower in {"code", "pass"}
+
+    @classmethod
+    def _redact_url_for_identifier(cls, url: httpx.URL | str) -> str:
+        parsed_url = httpx.URL(url) if not isinstance(url, httpx.URL) else url
+        cleaned_url = parsed_url.copy_with(username=None, password=None)
+        if cleaned_url.query:
+            query_items = [(k, v) for k, v in cleaned_url.params.multi_items() if not cls._is_sensitive_query_param(k)]
+            new_query = urlencode(query_items) if query_items else None
+            cleaned_url = cleaned_url.copy_with(query=new_query.encode("ascii") if new_query else None)
+        return str(cleaned_url)
 
     def __init__(
         self,
@@ -118,8 +149,17 @@ class HTTPXAPITarget(HTTPTarget):
         )
 
         self.http_url = http_url
-        self._endpoint = http_url
-        self._destination_origin = self._get_destination_origin(http_url)
+
+        base_url = httpx_client_kwargs.get("base_url")
+        if not base_url and self._client:
+            client_base_url = getattr(self._client, "base_url", None)
+            if client_base_url and str(client_base_url):
+                base_url = client_base_url
+
+        resolved_url = httpx.URL(base_url).join(http_url) if base_url and str(base_url) else httpx.URL(http_url)
+
+        self._endpoint = self._redact_url_for_identifier(resolved_url)
+        self._destination_origin = self._get_destination_origin(str(resolved_url))
         self.method = method
         self.file_path = file_path
         self.allowed_upload_directory = self._resolve_allowed_upload_directory(allowed_upload_directory)

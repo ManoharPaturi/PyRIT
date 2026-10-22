@@ -388,3 +388,46 @@ def test_httpx_api_target_identifier_distinguishes_urls_and_methods(patch_centra
 
     assert first.get_identifier().hash != different_url.get_identifier().hash
     assert first.get_identifier().hash != different_method.get_identifier().hash
+
+
+def test_httpx_api_target_identifier_redacts_credentials(patch_central_database):
+    url_with_creds = "https://user:fake-password@example.test/api?api_key=fake-token&model=gpt-4&version=1"
+    target = HTTPXAPITarget(http_url=url_with_creds, method="POST")
+
+    # Full URL is preserved for actual requests
+    assert target.http_url == url_with_creds
+
+    # Credentials must not appear in identifier or serialized metadata
+    identifier = target.get_identifier()
+    assert identifier.endpoint == "https://example.test/api?model=gpt-4&version=1"
+    assert target._destination_origin == ("https", "example.test", None)
+
+    dump = identifier.model_dump_json()
+    assert "fake-password" not in dump
+    assert "fake-token" not in dump
+    assert "user" not in dump
+
+
+def test_httpx_api_target_identifier_resolves_base_url(patch_central_database):
+    target_a = HTTPXAPITarget(http_url="invoke", base_url="https://a.example.test/api/")
+    target_b = HTTPXAPITarget(http_url="invoke", base_url="https://b.example.test/api/")
+
+    assert target_a.get_identifier().endpoint == "https://a.example.test/api/invoke"
+    assert target_b.get_identifier().endpoint == "https://b.example.test/api/invoke"
+    assert target_a._destination_origin == ("https", "a.example.test", None)
+    assert target_b._destination_origin == ("https", "b.example.test", None)
+
+    assert target_a.get_identifier().hash != target_b.get_identifier().hash
+
+
+def test_httpx_api_target_identifier_redacts_base_url_credentials(patch_central_database):
+    target = HTTPXAPITarget(
+        http_url="invoke?token=secret",
+        base_url="https://admin:pass@example.test/api/",
+    )
+
+    identifier = target.get_identifier()
+    assert identifier.endpoint == "https://example.test/api/invoke"
+    assert "pass" not in identifier.model_dump_json()
+    assert "secret" not in identifier.model_dump_json()
+    assert "admin" not in identifier.model_dump_json()
