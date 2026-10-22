@@ -390,6 +390,79 @@ def test_httpx_api_target_identifier_distinguishes_urls_and_methods(patch_centra
     assert first.get_identifier().hash != different_method.get_identifier().hash
 
 
+def test_httpx_api_target_identifier_strips_fragment_and_extra_credential_queries(patch_central_database):
+    # A fragment is never part of the HTTP request target and can carry credentials.
+    target = HTTPXAPITarget(http_url="https://example.test/api#access_token=dummy-token")
+    identifier = target.get_identifier()
+    assert identifier.endpoint == "https://example.test/api"
+    assert "dummy-token" not in identifier.model_dump_json()
+    assert target.http_url == "https://example.test/api#access_token=dummy-token"
+
+    # Credential query names that bypass the original name filter.
+    target = HTTPXAPITarget(
+        http_url="https://example.test/api?jwt=dummy-token&client_assertion=dummy-assertion&model=gpt-4"
+    )
+    identifier = target.get_identifier()
+    assert identifier.endpoint == "https://example.test/api?model=gpt-4"
+    assert "dummy-token" not in identifier.model_dump_json()
+    assert "dummy-assertion" not in identifier.model_dump_json()
+
+
+async def test_httpx_api_target_identifier_matches_captured_request_url(patch_central_database):
+    """The identifier endpoint must resolve exactly like the httpx send path.
+
+    Uses the same URL-building semantics as httpx.AsyncClient: the base URL is
+    given a trailing slash and the request path is appended with any leading
+    slash stripped, so distinct base paths produce distinct endpoints instead
+    of colliding the way URL.join resolves them.
+    """
+    captured_urls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_urls.append(str(request.url))
+        return httpx.Response(200, json={"ok": True})
+
+    message = Message(message_pieces=[MessagePiece(role="user", original_value="mock")])
+
+    targets = [
+        HTTPXAPITarget(
+            http_url="invoke",
+            method="POST",
+            base_url="https://example.test/alpha",
+            transport=httpx.MockTransport(handler),
+        ),
+        HTTPXAPITarget(
+            http_url="invoke",
+            method="POST",
+            base_url="https://example.test/beta",
+            transport=httpx.MockTransport(handler),
+        ),
+        HTTPXAPITarget(
+            http_url="/invoke",
+            method="POST",
+            base_url="https://example.test/alpha",
+            transport=httpx.MockTransport(handler),
+        ),
+    ]
+
+    for target in targets:
+        await target.send_prompt_async(message=message)
+
+    # httpx appends the request path to the base path (trailing slash added,
+    # leading slash stripped), so both spellings of the same path agree.
+    assert captured_urls == [
+        "https://example.test/alpha/invoke",
+        "https://example.test/beta/invoke",
+        "https://example.test/alpha/invoke",
+    ]
+
+    # The identifier endpoints match the URLs the client actually requested,
+    # so distinct base paths no longer collide.
+    endpoints = [target.get_identifier().endpoint for target in targets]
+    assert endpoints == captured_urls
+    assert targets[0].get_identifier().hash != targets[1].get_identifier().hash
+
+
 def test_httpx_api_target_identifier_redacts_credentials(patch_central_database):
     url_with_creds = "https://user:fake-password@example.test/api?api_key=fake-token&model=gpt-4&version=1"
     target = HTTPXAPITarget(http_url=url_with_creds, method="POST")

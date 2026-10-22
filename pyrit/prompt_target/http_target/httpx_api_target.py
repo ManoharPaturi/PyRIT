@@ -65,6 +65,9 @@ class HTTPXAPITarget(HTTPTarget):
             "credential",
             "sig",
             "signature",
+            "jwt",
+            "assertion",
+            "bearer",
         }
     )
 
@@ -78,12 +81,34 @@ class HTTPXAPITarget(HTTPTarget):
     @classmethod
     def _redact_url_for_identifier(cls, url: httpx.URL | str) -> str:
         parsed_url = httpx.URL(url) if not isinstance(url, httpx.URL) else url
-        cleaned_url = parsed_url.copy_with(username=None, password=None)
+        # The fragment is never part of the HTTP request target, and can carry
+        # credentials (e.g. '#access_token=...'), so it is dropped entirely.
+        cleaned_url = parsed_url.copy_with(username=None, password=None, fragment=None)
         if cleaned_url.query:
             query_items = [(k, v) for k, v in cleaned_url.params.multi_items() if not cls._is_sensitive_query_param(k)]
             new_query = urlencode(query_items) if query_items else None
             cleaned_url = cleaned_url.copy_with(query=new_query.encode("ascii") if new_query else None)
         return str(cleaned_url)
+
+    @staticmethod
+    def _merge_base_and_url(base_url: httpx.URL, url: httpx.URL) -> httpx.URL:
+        """
+        Resolve ``url`` against ``base_url`` exactly like ``httpx.AsyncClient`` does.
+
+        ``httpx.AsyncClient._merge_url`` ensures the base URL ends in ``'/'`` and
+        appends the request path with any leading ``'/'`` stripped, so relative
+        URLs and absolute paths are appended to the base path rather than
+        replacing it — unlike ``httpx.URL.join``, which RFC 3986-resolves and can
+        collapse distinct base paths into the same identifier endpoint.
+
+        Returns:
+            The URL the client would actually send the request to.
+        """
+        base = base_url
+        if not base.raw_path.endswith(b"/"):
+            base = base.copy_with(raw_path=base.raw_path + b"/")
+        merged_raw_path = base.raw_path + url.raw_path.lstrip(b"/")
+        return base.copy_with(raw_path=merged_raw_path)
 
     def __init__(
         self,
@@ -156,7 +181,11 @@ class HTTPXAPITarget(HTTPTarget):
             if client_base_url and str(client_base_url):
                 base_url = client_base_url
 
-        resolved_url = httpx.URL(base_url).join(http_url) if base_url and str(base_url) else httpx.URL(http_url)
+        merge_url = httpx.URL(http_url)
+        if merge_url.is_relative_url and base_url and str(base_url):
+            resolved_url = self._merge_base_and_url(httpx.URL(base_url), merge_url)
+        else:
+            resolved_url = merge_url
 
         self._endpoint = self._redact_url_for_identifier(resolved_url)
         self._destination_origin = self._get_destination_origin(str(resolved_url))
