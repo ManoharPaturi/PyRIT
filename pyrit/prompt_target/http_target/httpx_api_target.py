@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import mimetypes
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -54,29 +55,46 @@ class HTTPXAPITarget(HTTPTarget):
             ),
         )
     )
-    _SENSITIVE_QUERY_PATTERNS: ClassVar[frozenset[str]] = frozenset(
+    _CREDENTIAL_QUERY_NAME_TOKENS: ClassVar[frozenset[str]] = frozenset(
         {
             "key",
+            "keys",
             "token",
+            "tokens",
             "secret",
+            "secrets",
             "password",
+            "passwords",
+            "passwd",
             "pwd",
             "auth",
+            "authorization",
             "credential",
+            "credentials",
             "sig",
             "signature",
+            "signatures",
             "jwt",
             "assertion",
+            "assertions",
             "bearer",
+            "apikey",
+            "oauth",
         }
     )
 
     @classmethod
     def _is_sensitive_query_param(cls, key: str) -> bool:
-        key_lower = key.lower().replace("-", "_")
-        if any(pattern in key_lower for pattern in cls._SENSITIVE_QUERY_PATTERNS):
+        # Match credential parameter names by word, not by substring: `design`
+        # contains "sig" and `author` contains "auth", but neither is a
+        # credential, and stripping them collapses distinct URLs into one
+        # identifier. Splitting on non-alphanumeric separators keeps compound
+        # credential names (`api_key`, `client_secret`, `access_token`,
+        # `api-token`) sensitive while leaving unrelated names intact.
+        tokens = {token for token in re.split(r"[^a-z0-9]+", key.lower()) if token}
+        if tokens & cls._CREDENTIAL_QUERY_NAME_TOKENS:
             return True
-        return key_lower in {"code", "pass"}
+        return key.lower() in {"code", "pass"}
 
     @classmethod
     def _redact_url_for_identifier(cls, url: httpx.URL | str) -> str:

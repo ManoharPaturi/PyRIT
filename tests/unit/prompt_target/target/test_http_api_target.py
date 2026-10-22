@@ -390,6 +390,38 @@ def test_httpx_api_target_identifier_distinguishes_urls_and_methods(patch_centra
     assert first.get_identifier().hash != different_method.get_identifier().hash
 
 
+def test_httpx_api_target_identifier_keeps_non_credential_names_containing_credential_substrings(
+    patch_central_database,
+):
+    """Harmless names that merely contain a credential substring must keep their
+    values so distinct URLs keep distinct identifiers (regression: `design`
+    contains "sig" and `author` contains "auth", but neither is a credential)."""
+    kept = [
+        HTTPXAPITarget(http_url="https://example.test/api?design=alpha"),
+        HTTPXAPITarget(http_url="https://example.test/api?design=beta"),
+        HTTPXAPITarget(http_url="https://example.test/api?author=jane&model=gpt-4"),
+        HTTPXAPITarget(http_url="https://example.test/api?assigned_model=m1"),
+    ]
+    assert [t.get_identifier().endpoint for t in kept] == [
+        "https://example.test/api?design=alpha",
+        "https://example.test/api?design=beta",
+        "https://example.test/api?author=jane&model=gpt-4",
+        "https://example.test/api?assigned_model=m1",
+    ]
+
+    # Distinct values under the same harmless name no longer collide.
+    assert kept[0].get_identifier().hash != kept[1].get_identifier().hash
+
+    # Compound credential names are still redacted at word boundaries.
+    stripped = [
+        HTTPXAPITarget(http_url="https://example.test/api?api_key=k"),
+        HTTPXAPITarget(http_url="https://example.test/api?client_secret=s"),
+        HTTPXAPITarget(http_url="https://example.test/api?api-token=t"),
+        HTTPXAPITarget(http_url="https://example.test/api?access_token=t"),
+    ]
+    assert all(t.get_identifier().endpoint == "https://example.test/api" for t in stripped)
+
+
 def test_httpx_api_target_identifier_strips_fragment_and_extra_credential_queries(patch_central_database):
     # A fragment is never part of the HTTP request target and can carry credentials.
     target = HTTPXAPITarget(http_url="https://example.test/api#access_token=dummy-token")
