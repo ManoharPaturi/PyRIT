@@ -421,6 +421,15 @@ def test_httpx_api_target_identifier_keeps_non_credential_names_containing_crede
     ]
     assert all(t.get_identifier().endpoint == "https://example.test/api" for t in stripped)
 
+    # camelCase spellings carry the same credential words and must redact too
+    # (regression: splitting only on punctuation treated `accessToken` as one
+    # opaque word, which leaked its value into the identifier).
+    for camel in ("accessToken", "clientSecret", "authToken", "apiKey", "APIKey"):
+        target = HTTPXAPITarget(http_url=f"https://example.test/api?{camel}=dummy-value")
+        dump = target.get_identifier().model_dump_json()
+        assert target.get_identifier().endpoint == "https://example.test/api", camel
+        assert "dummy-value" not in dump, camel
+
 
 def test_httpx_api_target_identifier_strips_fragment_and_extra_credential_queries(patch_central_database):
     # A fragment is never part of the HTTP request target and can carry credentials.

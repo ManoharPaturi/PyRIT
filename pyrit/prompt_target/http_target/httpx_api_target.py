@@ -88,10 +88,15 @@ class HTTPXAPITarget(HTTPTarget):
         # Match credential parameter names by word, not by substring: `design`
         # contains "sig" and `author` contains "auth", but neither is a
         # credential, and stripping them collapses distinct URLs into one
-        # identifier. Splitting on non-alphanumeric separators keeps compound
-        # credential names (`api_key`, `client_secret`, `access_token`,
-        # `api-token`) sensitive while leaving unrelated names intact.
-        tokens = {token for token in re.split(r"[^a-z0-9]+", key.lower()) if token}
+        # identifier. Splitting on non-alphanumeric separators and on camelCase
+        # word boundaries keeps compound credential names (`api_key`,
+        # `client_secret`, `access_token`, `accessToken`, `clientSecret`)
+        # sensitive while leaving unrelated names intact.
+        tokens = {
+            token.lower()
+            for token in re.split(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", key)
+            if token
+        }
         if tokens & cls._CREDENTIAL_QUERY_NAME_TOKENS:
             return True
         return key.lower() in {"code", "pass"}
