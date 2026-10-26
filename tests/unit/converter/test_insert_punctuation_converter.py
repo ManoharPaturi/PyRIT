@@ -78,3 +78,20 @@ async def test_punctuation_list_rejects_substrings_of_string_punctuation(punctua
     converter = InsertPunctuationConverter(seed=1)
     with pytest.raises(ValueError, match="Invalid punctuations"):
         await converter.convert_async(prompt="hello big world", punctuation_list=punctuation_list)
+
+
+async def test_insert_within_words_reaches_every_insertion_position():
+    """All n + 1 insertion points of an n character prompt must be reachable.
+
+    The index sample used to stop at n minus 1, so punctuation could never
+    land before the last character or at the end of the prompt.
+    """
+    seen_offsets = set()
+    for seed in range(200):
+        converter = InsertPunctuationConverter(between_words=False, word_swap_ratio=1.0, seed=seed)
+        result = await converter.convert_async(prompt="abc", input_type="text")
+        for offset, char in enumerate(result.output_text):
+            if not char.isalnum():
+                seen_offsets.add(offset)
+
+    assert seen_offsets == {0, 1, 2, 3}
