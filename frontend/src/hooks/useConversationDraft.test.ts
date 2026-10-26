@@ -160,6 +160,36 @@ describe('useConversationDraft', () => {
     },
   )
 
+  it('keeps the draft clean when applied conversions match no piece', () => {
+    const { result } = renderHook(() => useConversationDraft())
+    act(() => { result.current.begin({ ...initial, target: null }) })
+    expect(result.current.dirty).toBe(false)
+
+    // A conversion result whose piece is no longer in the draft must not
+    // reassign the message arrays, which would mark the draft dirty forever.
+    act(() => {
+      result.current.applyConversions({
+        missing: {
+          convertedValue: 'converted', convertedDataType: 'text',
+          converterInstanceIds: ['converter'], converterProvenance: [],
+        },
+      })
+    })
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.shouldBlock()).toBe(false)
+
+    const pieceId = initial.messages[0].pieces[0].draftId
+    act(() => {
+      result.current.applyConversions({
+        [pieceId]: {
+          convertedValue: 'converted', convertedDataType: 'text',
+          converterInstanceIds: ['converter'], converterProvenance: [],
+        },
+      })
+    })
+    expect(result.current.dirty).toBe(true)
+  })
+
   it('protects target-only changes and ignores target object replacement with the same identity', () => {
     const target = makeTarget({ target_registry_name: 'first' })
     const { result } = renderHook(() => useConversationDraft())

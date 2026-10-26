@@ -134,17 +134,23 @@ export function useConversationDraft(
     })
   }
   const applyConversions = (applied: Record<string, PieceConversion>): void => {
-    changeMessages((messages: ConversationDraftMessage[]) => messages.map((message: ConversationDraftMessage) => ({
-      ...message, pieces: message.pieces.map((piece: ConversationDraftPiece) => {
-        const result = applied[piece.draftId]
-        return result ? {
-          ...piece, converted_value: result.convertedValue,
-          converted_value_data_type: result.convertedDataType,
-          applied_converter_ids: result.converterInstanceIds,
-          applied_converter_provenance: result.converterProvenance,
-        } : piece
-      }),
-    })))
+    changeMessages((messages: ConversationDraftMessage[]) => {
+      let changed = false
+      const next = messages.map((message: ConversationDraftMessage) => ({
+        ...message, pieces: message.pieces.map((piece: ConversationDraftPiece) => {
+          const result = applied[piece.draftId]
+          if (!result) return piece
+          changed = true
+          return {
+            ...piece, converted_value: result.convertedValue,
+            converted_value_data_type: result.convertedDataType,
+            applied_converter_ids: result.converterInstanceIds,
+            applied_converter_provenance: result.converterProvenance,
+          }
+        }),
+      }))
+      return changed ? next : messages
+    })
   }
   const save = async (
     destination: SaveConversationRequest['destination'], onSaved: (response: AddMessageResponse, target?: TargetInstance | null) => void,
