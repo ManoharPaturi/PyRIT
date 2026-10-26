@@ -428,11 +428,14 @@ export function analyticsViewFromLocation(
   location: { readonly search: string; readonly hash: string },
 ): { view: AttackAnalyticsViewState; error: string | null } {
   const search = new URLSearchParams(location.search)
-  const fragment = new URLSearchParams(location.hash.slice(1))
-  if (location.hash && (!fragment.has('analytics') || search.size > 0)) {
+  // A bare fragment anchor carries no state, so it is treated like an empty
+  // hash instead of a malformed link.
+  const hash = location.hash.length > 1 ? location.hash : ''
+  const fragment = new URLSearchParams(hash.slice(1))
+  if (hash && (!fragment.has('analytics') || search.size > 0)) {
     return { view: DEFAULT_ANALYTICS_VIEW, error: 'Cannot restore this analytics link. Use one analytics state, in the URL fragment.' }
   }
-  return analyticsViewFromSearchParams(location.hash ? fragment : search)
+  return analyticsViewFromSearchParams(hash ? fragment : search)
 }
 
 /**

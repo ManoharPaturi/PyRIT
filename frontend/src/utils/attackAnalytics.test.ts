@@ -226,6 +226,10 @@ describe('attack analytics view state', () => {
       hash: analyticsViewToHash(DEFAULT_ANALYTICS_VIEW),
     }).error).toMatch(/Use one analytics state/)
     expect(analyticsViewFromLocation({ search: '', hash: '#broken' }).error).toMatch(/Cannot restore/)
+    // A bare anchor carries no state and must not read as a malformed link.
+    const bare = analyticsViewFromLocation({ search: '', hash: '#' })
+    expect(bare.error).toBeNull()
+    expect(bare.view).toEqual(DEFAULT_ANALYTICS_VIEW)
     expect(analyticsViewFromLocation({ search: '?outcomes=success', hash: '' }).error).toMatch(/Unknown analytics URL parameter/)
     expect(analyticsViewFromLocation({
       search: '', hash: `${analyticsViewToHash(DEFAULT_ANALYTICS_VIEW)}&outcomes=success`,
