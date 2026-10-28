@@ -190,11 +190,7 @@ class InsertPunctuationConverter(Converter):
         # Store random indices of prompt_list into insert_indices. A list of n
         # characters has n + 1 insertion points (before the first character
         # through after the last), so every position stays reachable.
-        # If the prompt has too few characters to sample, insert at the end.
-        if len(prompt_list) < num_insertions:
-            insert_indices = [len(prompt_list)]
-        else:
-            insert_indices = rng.sample(range(len(prompt_list) + 1), num_insertions)
+        insert_indices = rng.sample(range(len(prompt_list) + 1), num_insertions)
 
         for index in insert_indices:
             # Insert into prompt_list at the insert_indices with random punctuation from the punctuation_list

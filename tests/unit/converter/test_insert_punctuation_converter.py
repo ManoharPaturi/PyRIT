@@ -2,6 +2,7 @@
 # Licensed under the MIT license.
 
 import re
+from unittest.mock import patch
 
 import pytest
 
@@ -80,18 +81,29 @@ async def test_punctuation_list_rejects_substrings_of_string_punctuation(punctua
         await converter.convert_async(prompt="hello big world", punctuation_list=punctuation_list)
 
 
-async def test_insert_within_words_reaches_every_insertion_position():
-    """All n + 1 insertion points of an n character prompt must be reachable.
+@pytest.mark.parametrize(
+    ("prompt", "offset"),
+    [("a", 0), ("a", 1), ("abc", 0), ("abc", 1), ("abc", 2), ("abc", 3)],
+)
+async def test_insert_within_words_reaches_every_insertion_position_async(*, prompt: str, offset: int) -> None:
+    converter = InsertPunctuationConverter(between_words=False, word_swap_ratio=1.0, seed=1)
+    with patch.object(converter, "_get_random_generator") as get_rng:
+        rng = get_rng.return_value
+        rng.sample.return_value = [offset]
+        rng.choice.return_value = "!"
+        result = await converter.convert_async(prompt=prompt, punctuation_list=["!"])
 
-    The index sample used to stop at n minus 1, so punctuation could never
-    land before the last character or at the end of the prompt.
-    """
-    seen_offsets = set()
-    for seed in range(200):
-        converter = InsertPunctuationConverter(between_words=False, word_swap_ratio=1.0, seed=seed)
-        result = await converter.convert_async(prompt="abc", input_type="text")
-        for offset, char in enumerate(result.output_text):
-            if not char.isalnum():
-                seen_offsets.add(offset)
+    population, count = rng.sample.call_args.args
+    assert list(population) == list(range(len(prompt) + 1))
+    assert count == 1
+    assert result.output_text == f"{prompt[:offset]}!{prompt[offset:]}"
+    assert result.output_type == "text"
 
-    assert seen_offsets == {0, 1, 2, 3}
+
+@pytest.mark.parametrize("prompt", ["", "...", " \t\n"])
+async def test_insert_within_words_without_words_async(prompt: str) -> None:
+    converter = InsertPunctuationConverter(between_words=False, word_swap_ratio=1.0, seed=1)
+    result = await converter.convert_async(prompt=prompt, punctuation_list=["!"])
+
+    assert result.output_text == f"!{prompt}"
+    assert result.output_type == "text"
